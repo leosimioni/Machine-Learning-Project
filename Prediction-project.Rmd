@@ -1,0 +1,139 @@
+---
+title: Machine Learning Project
+author: "Leonardo Simioni"
+date: "2022-09-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Synopsis
+
+This project will analyse and perform some predictions using the data from accelerometers on the belt, forearm, arm, and dumbbell of 6 participants. These participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+The goal of this project is to predict the manner in which they did the exercise, which is the "classe" variable in the training set. The prediction model will also be used in the end to predict 20 different test cases. 
+
+The training data for this project are available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv).
+
+The test data are available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv).
+
+The data for this project come from [this source](http://groupware.les.inf.puc-rio.br/har).
+
+## Downloading and preprocessing the data
+
+#### Loading the required packages
+
+```{r, output=FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+```
+
+#### Downloading the data sets
+
+```{r}
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainFile <- "./data/pml-training.csv"
+testFile  <- "./data/pml-testing.csv"
+if (!file.exists("./data")) {
+  dir.create("./data")
+}
+if (!file.exists(trainFile)) {
+  download.file(trainUrl, destfile=trainFile, method="curl")
+}
+if (!file.exists(testFile)) {
+  download.file(testUrl, destfile=testFile, method="curl")
+}
+```
+
+#### Reading the data sets
+
+```{r}
+trainRaw <- read.csv("./data/pml-training.csv")
+testRaw <- read.csv("./data/pml-testing.csv")
+dim(trainRaw)
+```
+
+```{r}
+dim(testRaw)
+```
+
+#### Cleaning the data 
+
+```{r}
+sum(complete.cases(trainRaw))
+```
+
+# Removing the missing (NA) values and irrelevant columns
+
+```{r}
+trainRaw <- trainRaw[, colSums(is.na(trainRaw)) == 0]
+testRaw <- testRaw[, colSums(is.na(testRaw)) == 0]
+```
+
+```{r}
+classe <- trainRaw$classe
+trainRemove <- grepl("^X|timestamp|window", names(trainRaw))
+trainRaw <- trainRaw[, !trainRemove]
+trainCleaned <- trainRaw[, sapply(trainRaw, is.numeric)]
+trainCleaned$classe <- classe
+testRemove <- grepl("^X|timestamp|window", names(testRaw))
+testRaw <- testRaw[, !testRemove]
+testCleaned <- testRaw[, sapply(testRaw, is.numeric)]
+```
+
+#### Splitting the training set: Training data set (70%) and validation data set (30%)
+
+```{r}
+set.seed(22519)  
+inTrain <- createDataPartition(trainCleaned$classe, p=0.70, list=F)
+trainData <- trainCleaned[inTrain, ]
+testData <- trainCleaned[-inTrain, ]
+```
+
+## Data Modeling
+
+# Decision Tree
+```{r}
+treeModel <- rpart(classe ~ ., data=trainData, method="class")
+prp(treeModel)
+```
+
+#### Using Random Forest and 5-fold cross validation
+
+```{r}
+controlRf <- trainControl(method="cv", 5)
+modelRf <- train(classe ~ ., data=trainData, method="rf", trControl=controlRf, ntree=250)
+modelRf
+```
+
+#### Estimating the performance on the validation data set
+
+```{r}
+predictRf <- predict(modelRf, testData)
+confusionMatrix(table(testData$classe, predictRf))
+```
+
+```{r}
+oose <- 1 - as.numeric(confusionMatrix(table(testData$classe, predictRf))$overall[1])
+oose
+```
+
+The estimated accuracy of the model is 99.37% and the estimated out-of-sample error is 0.62%.
+
+## Predicting 20 different test cases
+
+```{r}
+result <- predict(modelRf, testCleaned[, -length(names(testCleaned))])
+result
+```
+
+
+
+
+
